@@ -77,10 +77,11 @@ function App() {
     }, 0);
   };
 
-  // 세션 선택 시 현재 뷰 유지 (useAnalytics hook에서 자동 데이터 업데이트 처리)
+  // 세션 선택 시 메시지 뷰로 전환 (기본값)
   const handleSessionSelect = async (session: ClaudeSession) => {
+    // Switch to messages view when selecting a session
+    setAnalyticsCurrentView("messages");
     await selectSession(session);
-    // useAnalytics hook의 useEffect에서 자동으로 데이터 업데이트 처리
   };
 
   useEffect(() => {
