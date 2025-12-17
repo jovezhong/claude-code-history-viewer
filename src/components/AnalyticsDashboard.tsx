@@ -18,6 +18,7 @@ import {
   Award,
   Timer,
   CircuitBoard,
+  Loader2,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import type { ToolUsageStats, ActivityHeatmap } from "../types";
@@ -32,8 +33,12 @@ import { useAnalytics } from "../hooks/useAnalytics";
  *
  * props 전달을 최소화하고 직접 store와 hook을 사용하여 의존성을 낮춤
  */
-export const AnalyticsDashboard: React.FC = () => {
-  const { selectedProject, selectedSession, sessionTokenStats } = useAppStore();
+interface AnalyticsDashboardProps {
+  isViewingGlobalStats?: boolean;
+}
+
+export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewingGlobalStats = false }) => {
+  const { selectedProject, selectedSession, sessionTokenStats, globalSummary, isLoadingGlobalStats } = useAppStore();
 
   const { state: analyticsState } = useAnalytics();
   const { t } = useTranslation("components");
@@ -1264,6 +1269,252 @@ export const AnalyticsDashboard: React.FC = () => {
     );
   };
 
+  // Global Stats View Component - matches ProjectStatsView layout
+  const GlobalStatsView = () => {
+    if (!globalSummary) return null;
+
+    // Calculate total session time (in minutes) across all sessions
+    const totalSessionTime = Math.round(
+      globalSummary.daily_stats.reduce((sum, day) => sum + (day.active_hours * 60), 0)
+    );
+
+    return (
+      <div className="space-y-6">
+        {/* Overview Cards - Total Tokens first, then Total Messages */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            className={cn(
+              "p-6 rounded-lg border",
+              "bg-linear-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950",
+              COLORS.tools.search.border
+            )}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <Activity className={cn("w-8 h-8", COLORS.tools.search.icon)} />
+              <span className={cn("text-xs", COLORS.ui.text.muted)}>
+                {globalSummary.total_projects} {t("analytics.totalProjects")}
+              </span>
+            </div>
+            <div className={cn("text-2xl font-bold", COLORS.ui.text.primary)}>
+              {formatNumber(globalSummary.total_tokens)}
+            </div>
+            <div className={cn("text-sm", COLORS.ui.text.tertiary)}>
+              {t("analytics.totalTokens")}
+            </div>
+          </div>
+
+          <div
+            className={cn(
+              "p-6 rounded-lg border",
+              "bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950",
+              COLORS.semantic.info.border
+            )}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <MessageCircle
+                className={cn("w-8 h-8", COLORS.semantic.info.icon)}
+              />
+              <span className={cn("text-xs", COLORS.ui.text.muted)}>
+                {t("analytics.totalSessions")}: {globalSummary.total_sessions}
+              </span>
+            </div>
+            <div className={cn("text-2xl font-bold", COLORS.ui.text.primary)}>
+              {formatNumber(globalSummary.total_messages)}
+            </div>
+            <div className={cn("text-sm", COLORS.ui.text.tertiary)}>
+              {t("analytics.totalMessages")}
+            </div>
+          </div>
+
+          <div
+            className={cn(
+              "p-6 rounded-lg border",
+              "bg-linear-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950",
+              COLORS.semantic.success.border
+            )}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <Clock className={cn("w-8 h-8", COLORS.semantic.success.icon)} />
+            </div>
+            <div className={cn("text-2xl font-bold", COLORS.ui.text.primary)}>
+              {formatDuration(totalSessionTime)}
+            </div>
+            <div className={cn("text-sm", COLORS.ui.text.tertiary)}>
+              {t("analytics.sessionTime")}
+            </div>
+          </div>
+
+          <div
+            className={cn(
+              "p-6 rounded-lg border",
+              "bg-linear-to-br from-orange-50 to-red-50 dark:from-orange-950 dark:to-red-950",
+              COLORS.semantic.warning.border
+            )}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <Wrench className={cn("w-8 h-8", COLORS.semantic.warning.icon)} />
+            </div>
+            <div className={cn("text-2xl font-bold", COLORS.ui.text.primary)}>
+              {globalSummary.most_used_tools.length}
+            </div>
+            <div className={cn("text-sm", COLORS.ui.text.tertiary)}>
+              {t("analytics.toolsUsed")}
+            </div>
+          </div>
+        </div>
+
+        {/* First Row: Model Distribution and Most Used Tools */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Model Distribution */}
+          {globalSummary.model_distribution.length > 0 && (
+            <div
+              className={cn(
+                "p-6 rounded-lg border",
+                COLORS.ui.background.white,
+                COLORS.ui.border.medium
+              )}
+            >
+              <h3 className={cn("text-lg font-semibold mb-4", COLORS.ui.text.primary)}>
+                {t("analytics.modelDistribution")}
+              </h3>
+              <div className="space-y-3">
+                {globalSummary.model_distribution.map((model) => (
+                  <div key={model.model_name}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={cn("text-sm font-medium", COLORS.ui.text.primary)}>
+                        {model.model_name}
+                      </span>
+                      <span className={cn("text-sm", COLORS.ui.text.secondary)}>
+                        {formatNumber(model.token_count)} tokens
+                      </span>
+                    </div>
+                    <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all"
+                        style={{
+                          width: `${(model.token_count / globalSummary.total_tokens) * 100}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Most Used Tools */}
+          <div
+            className={cn(
+              "p-6 rounded-lg border",
+              COLORS.ui.background.white,
+              COLORS.ui.border.medium
+            )}
+          >
+            <h3
+              className={cn(
+                "text-lg font-semibold mb-4",
+                COLORS.ui.text.primary
+              )}
+            >
+              {t("analytics.mostUsedToolsTitle")}
+            </h3>
+            {globalSummary.most_used_tools.length > 0 ? (
+              <ToolUsageChart tools={globalSummary.most_used_tools} />
+            ) : (
+              <div className={cn("text-center py-8", COLORS.ui.text.muted)}>
+                {t("analytics.No tool usage data available")}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Second Row: Activity Heatmap and Top Projects */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Activity Heatmap */}
+          <div
+            className={cn(
+              "p-6 rounded-lg border",
+              COLORS.ui.background.white,
+              COLORS.ui.border.medium
+            )}
+          >
+            <h3
+              className={cn(
+                "text-lg font-semibold mb-4",
+                COLORS.ui.text.primary
+              )}
+            >
+              {t("analytics.activityHeatmapTitle")}
+            </h3>
+            {globalSummary.activity_heatmap.length > 0 ? (
+              <ActivityHeatmapComponent
+                data={globalSummary.activity_heatmap}
+              />
+            ) : (
+              <div className={cn("text-center py-8", COLORS.ui.text.muted)}>
+                {t("analytics.No activity data available")}
+              </div>
+            )}
+          </div>
+
+          {/* Top Projects */}
+          {globalSummary.top_projects.length > 0 && (
+            <div
+              className={cn(
+                "p-6 rounded-lg border",
+                COLORS.ui.background.white,
+                COLORS.ui.border.medium
+              )}
+            >
+              <h3 className={cn("text-lg font-semibold mb-4", COLORS.ui.text.primary)}>
+                {t("analytics.topProjects")}
+              </h3>
+              <div className="space-y-3">
+                {globalSummary.top_projects.slice(0, 10).map((project, index) => (
+                  <div
+                    key={project.project_name}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg",
+                      "bg-gray-50 dark:bg-gray-800/50"
+                    )}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm",
+                          index === 0 ? "bg-yellow-500 text-white" :
+                          index === 1 ? "bg-gray-400 text-white" :
+                          index === 2 ? "bg-orange-600 text-white" :
+                          "bg-gray-300 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                        )}
+                      >
+                        {index + 1}
+                      </div>
+                      <div>
+                        <p className={cn("font-medium text-sm", COLORS.ui.text.primary)}>
+                          {project.project_name}
+                        </p>
+                        <p className={cn("text-xs", COLORS.ui.text.tertiary)}>
+                          {project.sessions} sessions • {project.messages} messages
+                        </p>
+                      </div>
+                    </div>
+                    <div className={cn("text-right")}>
+                      <p className={cn("font-bold text-sm", COLORS.ui.text.primary)}>
+                        {formatNumber(project.tokens)}
+                      </p>
+                      <p className={cn("text-xs", COLORS.ui.text.tertiary)}>tokens</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Auto-switch to session tab when session is selected
   React.useEffect(() => {
     if (selectedSession && sessionStats && sessionComparison) {
@@ -1271,8 +1522,33 @@ export const AnalyticsDashboard: React.FC = () => {
     }
   }, [selectedSession, sessionStats, sessionComparison]);
 
-  // Main render logic
-  if (!selectedProject) {
+  // Main render logic - Show Global Stats when viewing global stats or no project is selected
+  if (isViewingGlobalStats || !selectedProject) {
+    if (isLoadingGlobalStats) {
+      return (
+        <div
+          className={cn(
+            "flex-1 p-6 flex items-center justify-center",
+            COLORS.ui.background.primary
+          )}
+        >
+          <div className="text-center">
+            <Loader2 className={cn("w-16 h-16 mx-auto mb-4 animate-spin", COLORS.ui.text.disabled)} />
+            <h2 className={cn("text-xl font-semibold mb-2", COLORS.ui.text.primary)}>
+              {t("analytics.loadingGlobalStats")}
+            </h2>
+            <p className={cn("text-sm", COLORS.ui.text.tertiary)}>
+              {t("analytics.loadingGlobalStatsDescription")}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (globalSummary) {
+      return <GlobalStatsView />;
+    }
+
     return (
       <div
         className={cn(
@@ -1297,25 +1573,50 @@ export const AnalyticsDashboard: React.FC = () => {
     );
   }
 
+  // Project-specific stats
   return (
-    <div className="flex-1 p-6 overflow-auto">
-      <div className="mb-6">
-        <div className="flex items-center space-x-2 mb-4">
-          <CircuitBoard className={cn("w-6 h-6", COLORS.semantic.info.icon)} />
-          <h2 className={cn("text-xl font-semibold", COLORS.ui.text.primary)}>
-            {t("analytics.dashboard")}
-          </h2>
+    <div className={cn("flex-1 p-6 overflow-auto", COLORS.ui.background.primary)}>
+      {/* Tab Selector - Only show when session is selected */}
+      {selectedSession && sessionStats && sessionComparison && (
+        <div className="flex space-x-2 mb-6">
+          <button
+            onClick={() => setActiveTab("project")}
+            className={cn(
+              "px-4 py-2 rounded-lg transition-colors font-medium",
+              activeTab === "project"
+                ? "bg-blue-500 text-white"
+                : cn(
+                    "bg-gray-200 dark:bg-gray-700",
+                    COLORS.ui.text.secondary,
+                    "hover:bg-gray-300 dark:hover:bg-gray-600"
+                  )
+            )}
+          >
+            {t("analytics.projectOverview")}
+          </button>
+          <button
+            onClick={() => setActiveTab("session")}
+            className={cn(
+              "px-4 py-2 rounded-lg transition-colors font-medium",
+              activeTab === "session"
+                ? "bg-blue-500 text-white"
+                : cn(
+                    "bg-gray-200 dark:bg-gray-700",
+                    COLORS.ui.text.secondary,
+                    "hover:bg-gray-300 dark:hover:bg-gray-600"
+                  )
+            )}
+          >
+            {t("analytics.sessionDetails")}
+          </button>
         </div>
-        <p className={cn(COLORS.ui.text.tertiary)}>
-          {selectedProject?.name}
-          {selectedSession && ` • ${t("analytics.Session Analysis")}`}
-        </p>
-      </div>
+      )}
 
-      <QuickStatsBar />
-      <TabNavigation />
-
+      {/* Render based on active tab */}
       {activeTab === "project" ? <ProjectStatsView /> : <SessionStatsView />}
     </div>
   );
 };
+
+// Add display name for debugging
+AnalyticsDashboard.displayName = "AnalyticsDashboard";

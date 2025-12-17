@@ -11,6 +11,7 @@ import {
   type SessionTokenStats,
   type ProjectStatsSummary,
   type SessionComparison,
+  type GlobalStatsSummary,
   type AppError,
   AppErrorType,
 } from "../types";
@@ -37,6 +38,10 @@ interface AppStore extends AppState {
   // Analytics state
   analytics: AnalyticsState;
 
+  // Global stats state
+  globalSummary: GlobalStatsSummary | null;
+  isLoadingGlobalStats: boolean;
+
   // Actions
   initializeApp: () => Promise<void>;
   scanProjects: () => Promise<void>;
@@ -59,6 +64,10 @@ interface AppStore extends AppState {
   ) => Promise<SessionComparison>;
   clearTokenStats: () => void;
   setExcludeSidechain: (exclude: boolean) => void;
+
+  // Global stats actions
+  loadGlobalStats: () => Promise<void>;
+  clearGlobalStats: () => void;
 
   // Analytics actions
   setAnalyticsCurrentView: (view: AnalyticsViewType) => void;
@@ -104,6 +113,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   // Analytics state
   analytics: initialAnalyticsState,
+
+  // Global stats state
+  globalSummary: null,
+  isLoadingGlobalStats: false,
 
   // Actions
   initializeApp: async () => {
@@ -507,6 +520,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   clearTokenStats: () => {
     set({ sessionTokenStats: null, projectTokenStats: [] });
+  },
+
+  // Global stats actions
+  loadGlobalStats: async () => {
+    const { claudePath } = get();
+    if (!claudePath) return;
+
+    set({ isLoadingGlobalStats: true, error: null });
+    try {
+      const summary = await invoke<GlobalStatsSummary>(
+        "get_global_stats_summary",
+        { claudePath }
+      );
+      set({ globalSummary: summary });
+    } catch (error) {
+      console.error("Failed to load global stats:", error);
+      set({ error: { type: AppErrorType.UNKNOWN, message: String(error) } });
+    } finally {
+      set({ isLoadingGlobalStats: false });
+    }
+  },
+
+  clearGlobalStats: () => {
+    set({ globalSummary: null });
   },
 
   setExcludeSidechain: (exclude: boolean) => {

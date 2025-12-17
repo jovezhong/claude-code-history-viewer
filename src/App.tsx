@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ProjectTree } from "./components/ProjectTree";
 import { MessageViewer } from "./components/MessageViewer";
 import { TokenStatsViewer } from "./components/TokenStatsViewer";
@@ -38,6 +38,7 @@ function App() {
     selectProject,
     selectSession,
     loadMoreMessages,
+    loadGlobalStats,
   } = useAppStore();
 
   const {
@@ -51,6 +52,23 @@ function App() {
   const { t: tMessages } = useTranslation("messages");
   const { language, loadLanguage } = useLanguageStore();
 
+  // Track if viewing global stats
+  const [isViewingGlobalStats, setIsViewingGlobalStats] = useState(false);
+
+  // Global Stats 버튼 클릭 핸들러
+  const handleGlobalStatsClick = () => {
+    setIsViewingGlobalStats(true);
+    loadGlobalStats();
+    // Clear selected project and session to show global view
+    useAppStore.setState({ selectedProject: null, selectedSession: null });
+    // Switch to analytics view to show global dashboard
+    analyticsActions.switchToMessages(); // Reset to messages first
+    setTimeout(() => {
+      // Use setTimeout to ensure state is updated before switching
+      useAppStore.getState().setAnalyticsCurrentView("analytics");
+    }, 0);
+  };
+
   // 세션 선택 시 현재 뷰 유지 (useAnalytics hook에서 자동 데이터 업데이트 처리)
   const handleSessionSelect = async (session: ClaudeSession) => {
     await selectSession(session);
@@ -60,13 +78,13 @@ function App() {
   useEffect(() => {
     // 언어 설정 로드 후 앱 초기화
     loadLanguage()
-      .then(() => {
-        initializeApp();
+      .then(async () => {
+        await initializeApp();
       })
-      .catch((error) => {
+      .catch(async (error) => {
         console.error("Failed to load language:", error);
         // 기본 언어로 앱 초기화 진행
-        initializeApp();
+        await initializeApp();
       });
   }, [initializeApp, loadLanguage]);
 
@@ -101,6 +119,9 @@ function App() {
   const handleProjectSelect = async (project: ClaudeProject) => {
     const wasAnalyticsOpen = computed.isAnalyticsView;
     const wasTokenStatsOpen = computed.isTokenStatsView;
+
+    // Clear global stats view flag when selecting a project
+    setIsViewingGlobalStats(false);
 
     // 기존 분석 데이터 초기화
     if (!computed.isMessagesView) {
@@ -192,7 +213,9 @@ function App() {
             selectedSession={selectedSession}
             onProjectSelect={handleProjectSelect}
             onSessionSelect={handleSessionSelect}
+            onGlobalStatsClick={handleGlobalStatsClick}
             isLoading={isLoadingProjects || isLoadingSessions}
+            isViewingGlobalStats={isViewingGlobalStats}
           />
 
           {/* Main Content Area */}
@@ -200,7 +223,8 @@ function App() {
             {/* Content Header */}
             {(selectedSession ||
               computed.isTokenStatsView ||
-              computed.isAnalyticsView) && (
+              computed.isAnalyticsView ||
+              isViewingGlobalStats) && (
               <div
                 className={cn(
                   "p-4 border-b",
@@ -216,15 +240,19 @@ function App() {
                         COLORS.ui.text.primary
                       )}
                     >
-                      {computed.isAnalyticsView
+                      {isViewingGlobalStats
+                        ? tComponents("analytics.globalOverview")
+                        : computed.isAnalyticsView
                         ? tComponents("analytics.dashboard")
                         : computed.isTokenStatsView
                         ? tMessages("tokenStats.title")
                         : tComponents("message.conversation")}
                     </h2>
                     <span className={cn("text-sm", COLORS.ui.text.secondary)}>
-                      {selectedSession?.summary ||
-                        tComponents("session.summaryNotFound")}
+                      {isViewingGlobalStats
+                        ? tComponents("analytics.globalOverviewDescription")
+                        : selectedSession?.summary ||
+                          tComponents("session.summaryNotFound")}
                     </span>
                     {computed.isMessagesView && selectedSession && (
                       <div>
@@ -244,7 +272,7 @@ function App() {
                         {tComponents("analytics.tokenUsageDetailed")}
                       </p>
                     )}
-                    {computed.isAnalyticsView && (
+                    {computed.isAnalyticsView && !isViewingGlobalStats && (
                       <p className={cn("text-sm mt-1", COLORS.ui.text.muted)}>
                         {selectedSession
                           ? tComponents("analytics.projectSessionAnalysis")
@@ -258,9 +286,9 @@ function App() {
 
             {/* Content */}
             <div className="flex-1 overflow-hidden">
-              {computed.isAnalyticsView ? (
+              {computed.isAnalyticsView || isViewingGlobalStats ? (
                 <div className="h-full overflow-y-auto">
-                  <AnalyticsDashboard />
+                  <AnalyticsDashboard isViewingGlobalStats={isViewingGlobalStats} />
                 </div>
               ) : computed.isTokenStatsView ? (
                 <div className="h-full overflow-y-auto p-6 space-y-8">

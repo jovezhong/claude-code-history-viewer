@@ -3,7 +3,9 @@
     "title": "Project:",
     "notFound": "Project not found",
     "selectToView": "Select a project to view analytics",
-    "count": "Projects: {{count}}"
+    "count": "Projects: {{count}}",
+    "globalStats": "📊 Global Statistics",
+    "globalStatsDescription": "All projects overview"
   },
   "session": {
     "title": "Session:",
@@ -177,7 +179,19 @@
     "toolUsageError": "Tool Usage Error",
     "toolUsageName": "Tool Usage Name",
     "tokens": "tokens",
-    "units": "units"
+    "units": "units",
+    "globalOverview": "Global Overview",
+    "globalOverviewDescription": "Aggregated statistics across all Claude Code projects on your machine",
+    "totalProjects": "Total Projects",
+    "activityPeriod": "Activity Period",
+    "firstMessage": "First Message",
+    "lastMessage": "Last Message",
+    "daysSpan": "Days Span",
+    "days": "days",
+    "modelDistribution": "Model Distribution",
+    "topProjects": "Top Projects by Tokens",
+    "loadingGlobalStats": "Loading Global Statistics",
+    "loadingGlobalStatsDescription": "Aggregating data across all projects..."
   },
   "time": {
     "start": "Start:",

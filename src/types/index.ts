@@ -259,6 +259,44 @@ export interface SessionComparison {
   is_above_average: boolean;
 }
 
+export interface DateRange {
+  first_message?: string;
+  last_message?: string;
+  days_span: number;
+}
+
+export interface ModelStats {
+  model_name: string;
+  message_count: number;
+  token_count: number;
+}
+
+export interface ProjectRanking {
+  project_name: string;
+  sessions: number;
+  messages: number;
+  tokens: number;
+}
+
+export interface GlobalStatsSummary {
+  total_projects: number;
+  total_sessions: number;
+  total_messages: number;
+  total_tokens: number;
+  date_range: DateRange;
+  token_distribution: {
+    input: number;
+    output: number;
+    cache_creation: number;
+    cache_read: number;
+  };
+  daily_stats: DailyStats[];
+  activity_heatmap: ActivityHeatmap[];
+  most_used_tools: ToolUsageStats[];
+  model_distribution: ModelStats[];
+  top_projects: ProjectRanking[];
+}
+
 // 업데이트 관련 타입 정의
 export type UpdatePriority = "critical" | "recommended" | "optional";
 export type UpdateType = "hotfix" | "feature" | "patch" | "major";
