@@ -183,6 +183,43 @@ pub struct SessionComparison {
     pub is_above_average: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DateRange {
+    pub first_message: Option<String>,
+    pub last_message: Option<String>,
+    pub days_span: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelStats {
+    pub model_name: String,
+    pub message_count: u32,
+    pub token_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectRanking {
+    pub project_name: String,
+    pub sessions: u32,
+    pub messages: u32,
+    pub tokens: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GlobalStatsSummary {
+    pub total_projects: u32,
+    pub total_sessions: u32,
+    pub total_messages: u32,
+    pub total_tokens: u64,
+    pub date_range: DateRange,
+    pub token_distribution: TokenDistribution,
+    pub daily_stats: Vec<DailyStats>,
+    pub activity_heatmap: Vec<ActivityHeatmap>,
+    pub most_used_tools: Vec<ToolUsageStats>,
+    pub model_distribution: Vec<ModelStats>,
+    pub top_projects: Vec<ProjectRanking>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

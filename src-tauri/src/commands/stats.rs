@@ -442,3 +442,211 @@ impl TryFrom<RawLogEntry> for ClaudeMessage {
         })
     }
 }
+
+#[tauri::command]
+pub async fn get_global_stats_summary(claude_path: String) -> Result<GlobalStatsSummary, String> {
+    let projects_path = PathBuf::from(&claude_path).join("projects");
+
+    if !projects_path.exists() {
+        return Err("Projects directory not found".to_string());
+    }
+
+    let mut summary = GlobalStatsSummary::default();
+
+    let mut tool_usage_map: HashMap<String, (u32, u32)> = HashMap::new();
+    let mut daily_stats_map: HashMap<String, DailyStats> = HashMap::new();
+    let mut activity_map: HashMap<(u8, u8), (u32, u32)> = HashMap::new();
+    let mut model_usage_map: HashMap<String, (u32, u64)> = HashMap::new();
+    let mut project_stats_map: HashMap<String, (u32, u32, u64)> = HashMap::new();
+    let mut global_first_message: Option<DateTime<Utc>> = None;
+    let mut global_last_message: Option<DateTime<Utc>> = None;
+
+    for project_entry in fs::read_dir(&projects_path).map_err(|e| e.to_string())? {
+        let project_entry = project_entry.map_err(|e| e.to_string())?;
+        let project_path = project_entry.path();
+
+        if !project_path.is_dir() {
+            continue;
+        }
+
+        let project_name = project_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("Unknown")
+            .to_string();
+
+        summary.total_projects += 1;
+
+        let mut project_sessions = 0u32;
+        let mut project_messages = 0u32;
+        let mut project_tokens = 0u64;
+
+        for entry in WalkDir::new(&project_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("jsonl"))
+        {
+            summary.total_sessions += 1;
+            project_sessions += 1;
+
+            let session_path = entry.path();
+            let file = match fs::File::open(session_path) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            let reader = BufReader::new(file);
+
+            for line in reader.lines() {
+                let line = match line {
+                    Ok(l) => l,
+                    Err(_) => continue,
+                };
+
+                if line.trim().is_empty() {
+                    continue;
+                }
+
+                if let Ok(log_entry) = serde_json::from_str::<RawLogEntry>(&line) {
+                    if let Ok(message) = ClaudeMessage::try_from(log_entry) {
+                        summary.total_messages += 1;
+                        project_messages += 1;
+
+                        if let Ok(timestamp) = DateTime::parse_from_rfc3339(&message.timestamp) {
+                            let timestamp = timestamp.with_timezone(&Utc);
+
+                            if global_first_message.is_none() || timestamp < global_first_message.unwrap() {
+                                global_first_message = Some(timestamp);
+                            }
+                            if global_last_message.is_none() || timestamp > global_last_message.unwrap() {
+                                global_last_message = Some(timestamp);
+                            }
+
+                            let hour = timestamp.hour() as u8;
+                            let day = timestamp.weekday().num_days_from_sunday() as u8;
+                            let usage = extract_token_usage(&message);
+                            let tokens = usage.input_tokens.unwrap_or(0) as u64
+                                + usage.output_tokens.unwrap_or(0) as u64
+                                + usage.cache_creation_input_tokens.unwrap_or(0) as u64
+                                + usage.cache_read_input_tokens.unwrap_or(0) as u64;
+
+                            summary.total_tokens += tokens;
+                            project_tokens += tokens;
+
+                            let activity_entry = activity_map.entry((hour, day)).or_insert((0, 0));
+                            activity_entry.0 += 1;
+                            activity_entry.1 += tokens as u32;
+
+                            let date = timestamp.format("%Y-%m-%d").to_string();
+                            let daily_entry = daily_stats_map.entry(date.clone()).or_insert_with(|| DailyStats {
+                                date, ..Default::default()
+                            });
+
+                            daily_entry.total_tokens += tokens as u32;
+                            daily_entry.input_tokens += usage.input_tokens.unwrap_or(0);
+                            daily_entry.output_tokens += usage.output_tokens.unwrap_or(0);
+                            daily_entry.message_count += 1;
+
+                            summary.token_distribution.input += usage.input_tokens.unwrap_or(0);
+                            summary.token_distribution.output += usage.output_tokens.unwrap_or(0);
+                            summary.token_distribution.cache_creation += usage.cache_creation_input_tokens.unwrap_or(0);
+                            summary.token_distribution.cache_read += usage.cache_read_input_tokens.unwrap_or(0);
+
+                            if let Some(model_name) = &message.model {
+                                let model_entry = model_usage_map.entry(model_name.clone()).or_insert((0, 0));
+                                model_entry.0 += 1;
+                                model_entry.1 += tokens;
+                            }
+                        }
+
+                        if message.message_type == "assistant" {
+                            if let Some(content) = &message.content {
+                                if let Some(content_array) = content.as_array() {
+                                    for item in content_array {
+                                        if let Some(item_type) = item.get("type").and_then(|v| v.as_str()) {
+                                            if item_type == "tool_use" {
+                                                if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
+                                                    let tool_entry = tool_usage_map.entry(name.to_string()).or_insert((0, 0));
+                                                    tool_entry.0 += 1;
+                                                    tool_entry.1 += 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(tool_use) = &message.tool_use {
+                            if let Some(name) = tool_use.get("name").and_then(|v| v.as_str()) {
+                                let tool_entry = tool_usage_map.entry(name.to_string()).or_insert((0, 0));
+                                tool_entry.0 += 1;
+                                if let Some(result) = &message.tool_use_result {
+                                    let is_error = result.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false);
+                                    if !is_error {
+                                        tool_entry.1 += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        project_stats_map.insert(project_name, (project_sessions, project_messages, project_tokens));
+    }
+
+    summary.most_used_tools = tool_usage_map
+        .into_iter()
+        .map(|(name, (usage, success))| ToolUsageStats {
+            tool_name: name,
+            usage_count: usage,
+            success_rate: if usage > 0 { (success as f32 / usage as f32) * 100.0 } else { 0.0 },
+            avg_execution_time: None,
+        })
+        .collect();
+    summary.most_used_tools.sort_by(|a, b| b.usage_count.cmp(&a.usage_count));
+
+    summary.model_distribution = model_usage_map
+        .into_iter()
+        .map(|(model_name, (message_count, token_count))| ModelStats {
+            model_name,
+            message_count,
+            token_count,
+        })
+        .collect();
+    summary.model_distribution.sort_by(|a, b| b.token_count.cmp(&a.token_count));
+
+    summary.top_projects = project_stats_map
+        .into_iter()
+        .map(|(project_name, (sessions, messages, tokens))| ProjectRanking {
+            project_name,
+            sessions,
+            messages,
+            tokens,
+        })
+        .collect();
+    summary.top_projects.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+    summary.top_projects.truncate(10);
+
+    summary.daily_stats = daily_stats_map.into_values().collect();
+    summary.daily_stats.sort_by(|a, b| a.date.cmp(&b.date));
+
+    summary.activity_heatmap = activity_map
+        .into_iter()
+        .map(|((hour, day), (count, tokens))| ActivityHeatmap {
+            hour,
+            day,
+            activity_count: count,
+            tokens_used: tokens,
+        })
+        .collect();
+
+    if let (Some(first), Some(last)) = (global_first_message, global_last_message) {
+        summary.date_range.first_message = Some(first.to_rfc3339());
+        summary.date_range.last_message = Some(last.to_rfc3339());
+        summary.date_range.days_span = (last - first).num_days() as u32;
+    }
+
+    Ok(summary)
+}
