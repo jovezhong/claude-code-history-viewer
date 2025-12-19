@@ -66,15 +66,11 @@ function App() {
   // Global Stats 버튼 클릭 핸들러
   const handleGlobalStatsClick = () => {
     setIsViewingGlobalStats(true);
-    loadGlobalStats();
     // Clear selected project and session to show global view
     useAppStore.setState({ selectedProject: null, selectedSession: null });
     // Switch to analytics view to show global dashboard
-    analyticsActions.switchToMessages(); // Reset to messages first
-    setTimeout(() => {
-      // Use setTimeout to ensure state is updated before switching
-      useAppStore.getState().setAnalyticsCurrentView("analytics");
-    }, 0);
+    useAppStore.getState().setAnalyticsCurrentView("analytics");
+    loadGlobalStats();
   };
 
   // 세션 선택 시 메시지 뷰로 전환 (기본값)

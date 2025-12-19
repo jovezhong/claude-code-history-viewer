@@ -509,7 +509,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ globalSummary: summary });
     } catch (error) {
       console.error("Failed to load global stats:", error);
-      set({ error: { type: AppErrorType.UNKNOWN, message: String(error) } });
+      set({
+        error: { type: AppErrorType.UNKNOWN, message: String(error) },
+        globalSummary: null
+      });
     } finally {
       set({ isLoadingGlobalStats: false });
     }

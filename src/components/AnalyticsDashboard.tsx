@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BarChart3,
@@ -66,10 +66,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewin
   ): number => {
     // Pricing per million tokens (MTok)
     const pricing: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
+      'claude-opus-4-5': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 },
       'claude-opus-4': { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 },
-      'claude-opus-4-5': { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 },
-      'claude-sonnet-4': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
       'claude-sonnet-4-5': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
+      'claude-sonnet-4': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
       'claude-3-5-sonnet': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
       'claude-3-5-haiku': { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.10 },
       'claude-3-haiku': { input: 0.25, output: 1.25, cacheWrite: 0.30, cacheRead: 0.03 },
@@ -95,7 +95,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewin
   };
 
   // 7일간의 일별 데이터 생성 (누락된 날짜 채우기)
-  const generateDailyData = () => {
+  const dailyData = useMemo(() => {
     if (!projectSummary?.daily_stats) return [];
 
     // 최근 7일 날짜 배열 생성
@@ -106,8 +106,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewin
     });
 
     // 날짜별 데이터 집계
-    const dailyData = last7Days.map((date) => {
-      const dayStats = projectSummary.daily_stats.find(
+    return last7Days.map((date) => {
+      const dayStats = projectSummary?.daily_stats.find(
         (stat) => stat.date === date
       );
 
@@ -119,9 +119,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewin
         active_hours: dayStats?.active_hours || 0,
       };
     });
-
-    return dailyData;
-  };
+  }, [projectSummary?.daily_stats]);
 
   // Activity heatmap component
   const ActivityHeatmapComponent = ({ data }: { data: ActivityHeatmap[] }) => {
@@ -565,8 +563,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewin
               {/* Enhanced bar chart */}
               <div className="relative h-48">
                 <div className="absolute  inset-0 flex items-end justify-between gap-1">
-                  {generateDailyData().map((stat) => {
-                    const dailyData = generateDailyData();
+                  {dailyData.map((stat) => {
                     const maxTokens = Math.max(
                       ...dailyData.map((s) => s.total_tokens),
                       1
@@ -650,13 +647,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewin
                   <div
                     className={cn("text-lg font-bold", COLORS.ui.text.primary)}
                   >
-                    {generateDailyData().reduce(
+                    {dailyData.reduce(
                       (sum, s) => sum + s.total_tokens,
                       0
                     ) > 0
                       ? formatNumber(
                           Math.round(
-                            generateDailyData().reduce(
+                            dailyData.reduce(
                               (sum, s) => sum + s.total_tokens,
                               0
                             ) / 7
@@ -673,7 +670,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewin
                     className={cn("text-lg font-bold", COLORS.ui.text.primary)}
                   >
                     {Math.round(
-                      generateDailyData().reduce(
+                      dailyData.reduce(
                         (sum, s) => sum + s.message_count,
                         0
                       ) / 7
@@ -688,7 +685,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewin
                     className={cn("text-lg font-bold", COLORS.ui.text.primary)}
                   >
                     {
-                      generateDailyData().filter((s) => s.total_tokens > 0)
+                      dailyData.filter((s) => s.total_tokens > 0)
                         .length
                     }
                   </div>
@@ -1364,7 +1361,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ isViewin
                       <p className={cn("font-bold text-sm", COLORS.ui.text.primary)}>
                         {formatNumber(project.tokens)}
                       </p>
-                      <p className={cn("text-xs", COLORS.ui.text.tertiary)}>tokens</p>
+                      <p className={cn("text-xs", COLORS.ui.text.tertiary)}>{t("analytics.tokens")}</p>
                     </div>
                   </div>
                 ))}

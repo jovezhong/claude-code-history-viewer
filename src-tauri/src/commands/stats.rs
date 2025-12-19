@@ -167,7 +167,7 @@ pub async fn get_project_stats_summary(project_path: String) -> Result<ProjectSt
     let mut session_durations: Vec<u32> = Vec::new();
     let mut tool_usage_map: HashMap<String, (u32, u32)> = HashMap::new();
     let mut daily_stats_map: HashMap<String, DailyStats> = HashMap::new();
-    let mut activity_map: HashMap<(u8, u8), (u32, u32)> = HashMap::new();
+    let mut activity_map: HashMap<(u8, u8), (u32, u64)> = HashMap::new();
     let mut session_dates: HashSet<String> = HashSet::new();
 
     for entry in WalkDir::new(&project_path)
@@ -210,7 +210,7 @@ pub async fn get_project_stats_summary(project_path: String) -> Result<ProjectSt
 
                         let activity_entry = activity_map.entry((hour, day)).or_insert((0, 0));
                         activity_entry.0 += 1;
-                        activity_entry.1 += tokens;
+                        activity_entry.1 += tokens as u64;
 
                         let date = timestamp.format("%Y-%m-%d").to_string();
                         session_dates.insert(date.clone());
@@ -219,15 +219,15 @@ pub async fn get_project_stats_summary(project_path: String) -> Result<ProjectSt
                             date, ..Default::default()
                         });
 
-                        daily_entry.total_tokens += tokens;
-                        daily_entry.input_tokens += usage.input_tokens.unwrap_or(0);
-                        daily_entry.output_tokens += usage.output_tokens.unwrap_or(0);
+                        daily_entry.total_tokens += tokens as u64;
+                        daily_entry.input_tokens += usage.input_tokens.unwrap_or(0) as u64;
+                        daily_entry.output_tokens += usage.output_tokens.unwrap_or(0) as u64;
                         daily_entry.message_count += 1;
 
-                        summary.token_distribution.input += usage.input_tokens.unwrap_or(0);
-                        summary.token_distribution.output += usage.output_tokens.unwrap_or(0);
-                        summary.token_distribution.cache_creation += usage.cache_creation_input_tokens.unwrap_or(0);
-                        summary.token_distribution.cache_read += usage.cache_read_input_tokens.unwrap_or(0);
+                        summary.token_distribution.input += usage.input_tokens.unwrap_or(0) as u64;
+                        summary.token_distribution.output += usage.output_tokens.unwrap_or(0) as u64;
+                        summary.token_distribution.cache_creation += usage.cache_creation_input_tokens.unwrap_or(0) as u64;
+                        summary.token_distribution.cache_read += usage.cache_read_input_tokens.unwrap_or(0) as u64;
                     }
 
                     if message.message_type == "assistant" {
@@ -336,7 +336,7 @@ pub async fn get_project_stats_summary(project_path: String) -> Result<ProjectSt
         .collect();
 
     summary.total_tokens = summary.token_distribution.input + summary.token_distribution.output + summary.token_distribution.cache_creation + summary.token_distribution.cache_read;
-    summary.avg_tokens_per_session = if summary.total_sessions > 0 { summary.total_tokens / summary.total_sessions as u32 } else { 0 };
+    summary.avg_tokens_per_session = if summary.total_sessions > 0 { summary.total_tokens / summary.total_sessions as u64 } else { 0 };
     summary.total_session_duration = session_durations.iter().sum::<u32>();
     summary.avg_session_duration = if !session_durations.is_empty() {
         summary.total_session_duration / session_durations.len() as u32
@@ -476,7 +476,7 @@ pub async fn get_global_stats_summary(claude_path: String) -> Result<GlobalStats
 
     let mut tool_usage_map: HashMap<String, (u32, u32)> = HashMap::new();
     let mut daily_stats_map: HashMap<String, DailyStats> = HashMap::new();
-    let mut activity_map: HashMap<(u8, u8), (u32, u32)> = HashMap::new();
+    let mut activity_map: HashMap<(u8, u8), (u32, u64)> = HashMap::new();
     let mut model_usage_map: HashMap<String, (u32, u64, u64, u64, u64, u64)> = HashMap::new(); // (message_count, total_tokens, input_tokens, output_tokens, cache_creation, cache_read)
     let mut project_stats_map: HashMap<String, (u32, u32, u64)> = HashMap::new();
     let mut global_first_message: Option<DateTime<Utc>> = None;
@@ -564,22 +564,22 @@ pub async fn get_global_stats_summary(claude_path: String) -> Result<GlobalStats
 
                             let activity_entry = activity_map.entry((hour, day)).or_insert((0, 0));
                             activity_entry.0 += 1;
-                            activity_entry.1 += tokens as u32;
+                            activity_entry.1 += tokens;
 
                             let date = timestamp.format("%Y-%m-%d").to_string();
                             let daily_entry = daily_stats_map.entry(date.clone()).or_insert_with(|| DailyStats {
                                 date, ..Default::default()
                             });
 
-                            daily_entry.total_tokens += tokens as u32;
-                            daily_entry.input_tokens += usage.input_tokens.unwrap_or(0);
-                            daily_entry.output_tokens += usage.output_tokens.unwrap_or(0);
+                            daily_entry.total_tokens += tokens as u64;
+                            daily_entry.input_tokens += usage.input_tokens.unwrap_or(0) as u64;
+                            daily_entry.output_tokens += usage.output_tokens.unwrap_or(0) as u64;
                             daily_entry.message_count += 1;
 
-                            summary.token_distribution.input += usage.input_tokens.unwrap_or(0);
-                            summary.token_distribution.output += usage.output_tokens.unwrap_or(0);
-                            summary.token_distribution.cache_creation += usage.cache_creation_input_tokens.unwrap_or(0);
-                            summary.token_distribution.cache_read += usage.cache_read_input_tokens.unwrap_or(0);
+                            summary.token_distribution.input += usage.input_tokens.unwrap_or(0) as u64;
+                            summary.token_distribution.output += usage.output_tokens.unwrap_or(0) as u64;
+                            summary.token_distribution.cache_creation += usage.cache_creation_input_tokens.unwrap_or(0) as u64;
+                            summary.token_distribution.cache_read += usage.cache_read_input_tokens.unwrap_or(0) as u64;
 
                             if let Some(model_name) = &message.model {
                                 let model_entry = model_usage_map.entry(model_name.clone()).or_insert((0, 0, 0, 0, 0, 0));
