@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ProjectTree } from "./components/ProjectTree";
 import { MessageViewer } from "./components/MessageViewer";
 import { TokenStatsViewer } from "./components/TokenStatsViewer";
@@ -63,14 +63,14 @@ function App() {
   const [isViewingGlobalStats, setIsViewingGlobalStats] = useState(false);
 
   // Global Stats 버튼 클릭 핸들러
-  const handleGlobalStatsClick = () => {
+  const handleGlobalStatsClick = useCallback(() => {
     setIsViewingGlobalStats(true);
     // Clear selected project and session to show global view
     useAppStore.setState({ selectedProject: null, selectedSession: null });
     // Switch to analytics view to show global dashboard
     useAppStore.getState().setAnalyticsCurrentView("analytics");
     loadGlobalStats();
-  };
+  }, [loadGlobalStats]);
 
   // 세션 선택 시 메시지 뷰로 전환 (기본값)
   const handleSessionSelect = async (session: ClaudeSession) => {
@@ -81,15 +81,17 @@ function App() {
 
   useEffect(() => {
     // 언어 설정 로드 후 앱 초기화
-    loadLanguage()
-      .then(async () => {
-        await initializeApp();
-      })
-      .catch(async (error) => {
+    const initialize = async () => {
+      try {
+        await loadLanguage();
+      } catch (error) {
         console.error("Failed to load language:", error);
+      } finally {
         // 기본 언어로 앱 초기화 진행
         await initializeApp();
-      });
+      }
+    };
+    initialize();
   }, [initializeApp, loadLanguage]);
 
   // i18n 언어 변경 감지
@@ -150,6 +152,7 @@ function App() {
         setAnalyticsProjectSummary(summary);
       } catch (error) {
         console.error("Failed to auto-load analytics for new project:", error);
+        setAnalyticsProjectSummary(null); // Clear stale data
         setAnalyticsProjectSummaryError(
           error instanceof Error ? error.message : "Failed to load project stats"
         );
